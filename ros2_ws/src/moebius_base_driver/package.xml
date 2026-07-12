@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>moebius_base_driver</name>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <description>ROS 2 Jazzy serial base driver for the Moebius differential-drive robot.</description>
   <maintainer email="jarvis2603@users.noreply.github.com">jarvis2603</maintainer>
   <license>MIT</license>
@@ -13,6 +13,7 @@
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>python3-serial</exec_depend>
   <exec_depend>launch</exec_depend>
