@@ -6,7 +6,20 @@ on:
   pull_request:
 
 jobs:
+  generated-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install generator dependency
+        run: pip install pyyaml
+      - name: Verify generated configuration is current
+        run: python3 scripts/generate_robot_config.py --check
+
   firmware:
+    needs: generated-config
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +33,7 @@ jobs:
         run: pio run
 
   ros2:
+    needs: generated-config
     runs-on: ubuntu-24.04
     container:
       image: ros:jazzy-ros-base
