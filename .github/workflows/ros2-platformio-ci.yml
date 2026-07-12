@@ -1,4 +1,4 @@
-name: ROS2 Jazzy and PlatformIO CI
+name: ROS2 Jazzy, PlatformIO and Web UI CI
 
 on:
   push:
@@ -31,6 +31,23 @@ jobs:
       - name: Build STM32 firmware
         working-directory: platformio_firmware
         run: pio run
+
+  web-ui:
+    needs: generated-config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web_ui/package-lock.json
+      - name: Install dependencies
+        working-directory: web_ui
+        run: npm install
+      - name: Build React application
+        working-directory: web_ui
+        run: npm run build
 
   ros2:
     needs: generated-config
