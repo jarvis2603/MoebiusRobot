@@ -20,7 +20,7 @@ setup(
     license='MIT',
     entry_points={
         'console_scripts': [
-            'base_driver = moebius_base_driver.base_driver:main',
+            'base_driver = moebius_base_driver.base_driver_node:main',
         ],
     },
 )
