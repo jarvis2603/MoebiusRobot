@@ -1,62 +1,47 @@
 #include <Arduino.h>
-#include <math.h>
+#include <Wire.h>
+#include <MoebiusCore.h>
 
-// MoebiusRobot STM32F103RCT6 firmware starter for ROS 2 Jazzy.
-// IMPORTANT: verify every pin against the actual controller schematic.
+using namespace moebius;
 
 namespace pins {
-constexpr PinName ROS_RX = PA_10;   // USART1 RX
-constexpr PinName ROS_TX = PA_9;    // USART1 TX
+constexpr PinName ROS_RX = PA_10;
+constexpr PinName ROS_TX = PA_9;
 constexpr uint32_t LEFT_PWM = PA0;
 constexpr uint32_t RIGHT_PWM = PA1;
 constexpr uint32_t LEFT_DIR = PB0;
 constexpr uint32_t RIGHT_DIR = PB1;
 constexpr uint32_t LEFT_ENC_A = PB6;
+constexpr uint32_t LEFT_ENC_B = PB5;
 constexpr uint32_t RIGHT_ENC_A = PB7;
+constexpr uint32_t RIGHT_ENC_B = PB4;  // JTAG pin: disable full JTAG if required.
 constexpr uint32_t ESTOP_IN = PB8;
 constexpr uint32_t STATUS_LED = PC13;
+constexpr uint32_t I2C2_SDA = PB11;
+constexpr uint32_t I2C2_SCL = PB10;
 }  // namespace pins
 
-HardwareSerial RosSerial(pins::ROS_RX, pins::ROS_TX);
-
-namespace config {
+namespace timing {
 constexpr uint32_t BAUD = 115200;
-constexpr uint32_t CONTROL_PERIOD_MS = 10;
-constexpr uint32_t FEEDBACK_PERIOD_MS = 20;
-constexpr uint32_t COMMAND_TIMEOUT_MS = 300;
-constexpr float WHEEL_RADIUS_M = 0.080f;       // Replace with measured value.
-constexpr float WHEEL_SEPARATION_M = 0.360f;   // Replace with measured value.
-constexpr float TICKS_PER_REV = 2048.0f;       // Include gearbox and quadrature factor.
-constexpr float MAX_WHEEL_RAD_S = 20.0f;
-constexpr int PWM_MAX = 255;
-}  // namespace config
+constexpr uint32_t CONTROL_PERIOD_MS = 10;   // 100 Hz motor PID
+constexpr uint32_t FEEDBACK_PERIOD_MS = 20;  // 50 Hz encoder/IMU feedback
+constexpr uint32_t IMU_PERIOD_MS = 20;       // 50 Hz
+}  // namespace timing
 
-volatile int32_t left_ticks = 0;
-volatile int32_t right_ticks = 0;
+RobotConfig robot;
+HardwareSerial RosSerial(pins::ROS_RX, pins::ROS_TX);
+TwoWire ImuWire(pins::I2C2_SDA, pins::I2C2_SCL);
 
-struct Pid {
-  float kp{18.0f};
-  float ki{4.0f};
-  float kd{0.10f};
-  float integral{0.0f};
-  float previous_error{0.0f};
+MotorDriver left_motor(pins::LEFT_PWM, pins::LEFT_DIR, false);
+MotorDriver right_motor(pins::RIGHT_PWM, pins::RIGHT_DIR, false);
+QuadratureEncoder left_encoder(pins::LEFT_ENC_A, pins::LEFT_ENC_B, false);
+QuadratureEncoder right_encoder(pins::RIGHT_ENC_A, pins::RIGHT_ENC_B, false);
+PidController left_pid(robot.kp, robot.ki, robot.kd);
+PidController right_pid(robot.kp, robot.ki, robot.kd);
+Mpu6050 imu(ImuWire);
+SerialProtocol protocol(RosSerial);
 
-  float update(float target, float measured, float dt) {
-    const float error = target - measured;
-    integral = constrain(integral + error * dt, -50.0f, 50.0f);
-    const float derivative = (dt > 0.0f) ? (error - previous_error) / dt : 0.0f;
-    previous_error = error;
-    return kp * error + ki * integral + kd * derivative;
-  }
-
-  void reset() {
-    integral = 0.0f;
-    previous_error = 0.0f;
-  }
-};
-
-Pid left_pid;
-Pid right_pid;
+ImuSample imu_sample;
 float target_left_rad_s = 0.0f;
 float target_right_rad_s = 0.0f;
 int32_t previous_left_ticks = 0;
@@ -64,156 +49,108 @@ int32_t previous_right_ticks = 0;
 uint32_t last_command_ms = 0;
 uint32_t last_control_ms = 0;
 uint32_t last_feedback_ms = 0;
-String rx_line;
+uint32_t last_imu_ms = 0;
+bool imu_available = false;
 
-void leftEncoderIsr() { ++left_ticks; }
-void rightEncoderIsr() { ++right_ticks; }
+void leftEncoderIsr() { left_encoder.handleInterrupt(); }
+void rightEncoderIsr() { right_encoder.handleInterrupt(); }
 
-void setMotor(uint32_t pwm_pin, uint32_t dir_pin, float command) {
-  const bool forward = command >= 0.0f;
-  const int pwm = constrain(static_cast<int>(fabsf(command)), 0, config::PWM_MAX);
-  digitalWrite(dir_pin, forward ? HIGH : LOW);
-  analogWrite(pwm_pin, pwm);
-}
+bool emergencyStopActive() { return digitalRead(pins::ESTOP_IN) == LOW; }
 
 void stopMotors() {
   target_left_rad_s = 0.0f;
   target_right_rad_s = 0.0f;
-  analogWrite(pins::LEFT_PWM, 0);
-  analogWrite(pins::RIGHT_PWM, 0);
+  left_motor.stop();
+  right_motor.stop();
   left_pid.reset();
   right_pid.reset();
 }
 
-bool emergencyStopActive() {
-  return digitalRead(pins::ESTOP_IN) == LOW;
-}
+void applyVelocityCommand(const VelocityCommand &command) {
+  const float half_track = robot.wheel_separation_m * 0.5f;
+  target_left_rad_s =
+      (command.linear_mps - command.angular_rps * half_track) / robot.wheel_radius_m;
+  target_right_rad_s =
+      (command.linear_mps + command.angular_rps * half_track) / robot.wheel_radius_m;
 
-void parseCommand(const String &line) {
-  // Expected frame: CMD,<linear_mps>,<angular_rps>
-  if (!line.startsWith("CMD,")) {
-    return;
-  }
-
-  const int comma1 = line.indexOf(',');
-  const int comma2 = line.indexOf(',', comma1 + 1);
-  if (comma1 < 0 || comma2 < 0) {
-    return;
-  }
-
-  const float linear = line.substring(comma1 + 1, comma2).toFloat();
-  const float angular = line.substring(comma2 + 1).toFloat();
-  if (!isfinite(linear) || !isfinite(angular)) {
-    return;
-  }
-
-  const float half_track = config::WHEEL_SEPARATION_M * 0.5f;
-  target_left_rad_s = (linear - angular * half_track) / config::WHEEL_RADIUS_M;
-  target_right_rad_s = (linear + angular * half_track) / config::WHEEL_RADIUS_M;
-  target_left_rad_s = constrain(target_left_rad_s, -config::MAX_WHEEL_RAD_S,
-                                config::MAX_WHEEL_RAD_S);
-  target_right_rad_s = constrain(target_right_rad_s, -config::MAX_WHEEL_RAD_S,
-                                 config::MAX_WHEEL_RAD_S);
+  const float max_rad_s = robot.max_rpm * TWO_PI / 60.0f;
+  target_left_rad_s = constrain(target_left_rad_s, -max_rad_s, max_rad_s);
+  target_right_rad_s = constrain(target_right_rad_s, -max_rad_s, max_rad_s);
   last_command_ms = millis();
 }
 
-void readSerialCommands() {
-  while (RosSerial.available() > 0) {
-    const char c = static_cast<char>(RosSerial.read());
-    if (c == '\n') {
-      rx_line.trim();
-      parseCommand(rx_line);
-      rx_line = "";
-    } else if (c != '\r' && rx_line.length() < 96) {
-      rx_line += c;
-    }
-  }
-}
-
 void runControlLoop(uint32_t now_ms) {
-  if (now_ms - last_control_ms < config::CONTROL_PERIOD_MS) {
-    return;
-  }
-
+  if (now_ms - last_control_ms < timing::CONTROL_PERIOD_MS) return;
   const float dt = (now_ms - last_control_ms) * 0.001f;
   last_control_ms = now_ms;
 
-  noInterrupts();
-  const int32_t left_now = left_ticks;
-  const int32_t right_now = right_ticks;
-  interrupts();
-
+  const int32_t left_now = left_encoder.read();
+  const int32_t right_now = right_encoder.read();
   const int32_t left_delta = left_now - previous_left_ticks;
   const int32_t right_delta = right_now - previous_right_ticks;
   previous_left_ticks = left_now;
   previous_right_ticks = right_now;
 
-  const float tick_to_rad = 2.0f * PI / config::TICKS_PER_REV;
-  const float measured_left = left_delta * tick_to_rad / dt;
-  const float measured_right = right_delta * tick_to_rad / dt;
+  const float tick_to_rad = TWO_PI / robot.counts_per_rev;
+  const float measured_left_rad_s = left_delta * tick_to_rad / dt;
+  const float measured_right_rad_s = right_delta * tick_to_rad / dt;
 
-  const bool timed_out = now_ms - last_command_ms > config::COMMAND_TIMEOUT_MS;
-  if (timed_out || emergencyStopActive()) {
+  if (emergencyStopActive() || now_ms - last_command_ms > robot.command_timeout_ms) {
     stopMotors();
     return;
   }
 
-  setMotor(pins::LEFT_PWM, pins::LEFT_DIR,
-           left_pid.update(target_left_rad_s, measured_left, dt));
-  setMotor(pins::RIGHT_PWM, pins::RIGHT_DIR,
-           right_pid.update(target_right_rad_s, measured_right, dt));
+  left_motor.write(left_pid.update(target_left_rad_s, measured_left_rad_s, dt));
+  right_motor.write(right_pid.update(target_right_rad_s, measured_right_rad_s, dt));
+}
+
+void updateImu(uint32_t now_ms) {
+  if (!imu_available || now_ms - last_imu_ms < timing::IMU_PERIOD_MS) return;
+  last_imu_ms = now_ms;
+  imu.read(imu_sample);
 }
 
 void publishFeedback(uint32_t now_ms) {
-  if (now_ms - last_feedback_ms < config::FEEDBACK_PERIOD_MS) {
-    return;
-  }
+  if (now_ms - last_feedback_ms < timing::FEEDBACK_PERIOD_MS) return;
   last_feedback_ms = now_ms;
 
-  noInterrupts();
-  const int32_t left_now = left_ticks;
-  const int32_t right_now = right_ticks;
-  interrupts();
-
-  // Compatible with the ROS 2 starter driver:
-  // FB,<left_ticks>,<right_ticks>,<gyro_z_rad_s>,<battery_voltage>
-  // IMU and battery acquisition are placeholders until the actual hardware is known.
-  const float gyro_z = 0.0f;
-  const float battery_voltage = 0.0f;
-  RosSerial.print("FB,");
-  RosSerial.print(left_now);
-  RosSerial.print(',');
-  RosSerial.print(right_now);
-  RosSerial.print(',');
-  RosSerial.print(gyro_z, 6);
-  RosSerial.print(',');
-  RosSerial.println(battery_voltage, 3);
+  // Battery ADC is board-specific and remains disabled until its divider is known.
+  constexpr float battery_voltage = 0.0f;
+  protocol.publishFeedback(left_encoder.read(), right_encoder.read(), imu_sample,
+                           battery_voltage, emergencyStopActive(), now_ms);
 }
 
 void setup() {
-  pinMode(pins::LEFT_PWM, OUTPUT);
-  pinMode(pins::RIGHT_PWM, OUTPUT);
-  pinMode(pins::LEFT_DIR, OUTPUT);
-  pinMode(pins::RIGHT_DIR, OUTPUT);
-  pinMode(pins::LEFT_ENC_A, INPUT_PULLUP);
-  pinMode(pins::RIGHT_ENC_A, INPUT_PULLUP);
   pinMode(pins::ESTOP_IN, INPUT_PULLUP);
   pinMode(pins::STATUS_LED, OUTPUT);
+  digitalWrite(pins::STATUS_LED, HIGH);
 
-  attachInterrupt(digitalPinToInterrupt(pins::LEFT_ENC_A), leftEncoderIsr, RISING);
-  attachInterrupt(digitalPinToInterrupt(pins::RIGHT_ENC_A), rightEncoderIsr, RISING);
+  left_motor.begin();
+  right_motor.begin();
+  left_encoder.begin(leftEncoderIsr);
+  right_encoder.begin(rightEncoderIsr);
 
-  RosSerial.begin(config::BAUD);
+  RosSerial.begin(timing::BAUD);
+  ImuWire.begin();
+  ImuWire.setClock(400000);
+  imu_available = imu.begin();
+
   stopMotors();
-  last_command_ms = millis();
-  last_control_ms = millis();
-  digitalWrite(pins::STATUS_LED, LOW);
+  const uint32_t now = millis();
+  last_command_ms = now;
+  last_control_ms = now;
+  last_feedback_ms = now;
+  last_imu_ms = now;
+  digitalWrite(pins::STATUS_LED, imu_available ? LOW : HIGH);
 }
 
 void loop() {
   const uint32_t now_ms = millis();
-  readSerialCommands();
+  VelocityCommand command;
+  if (protocol.poll(command)) applyVelocityCommand(command);
+  updateImu(now_ms);
   runControlLoop(now_ms);
   publishFeedback(now_ms);
-  digitalWrite(pins::STATUS_LED, emergencyStopActive() ? HIGH : LOW);
+  digitalWrite(pins::STATUS_LED,
+               (emergencyStopActive() || !imu_available) ? HIGH : LOW);
 }
