@@ -1,22 +1,25 @@
+from glob import glob
+import os
+
 from setuptools import find_packages, setup
 
 package_name = 'moebius_base_driver'
 
 setup(
     name=package_name,
-    version='0.1.0',
+    version='0.2.0',
     packages=find_packages(exclude=['test']),
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name + '/launch', ['launch/base_driver.launch.py']),
-        ('share/' + package_name + '/config', ['config/base_driver.yaml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
+        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='jarvis2603',
     maintainer_email='jarvis2603@users.noreply.github.com',
-    description='ROS 2 Jazzy serial base driver for MoebiusRobot.',
+    description='ROS 2 Jazzy mecanum serial driver for MoebiusRobot.',
     license='MIT',
     entry_points={
         'console_scripts': [
