@@ -12,6 +12,12 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('port', default_value='9090'),
         DeclareLaunchArgument('address', default_value='0.0.0.0'),
         Node(
+            package='moebius_base_driver',
+            executable='robot_control',
+            name='robot_control',
+            output='screen',
+        ),
+        Node(
             package='rosbridge_server',
             executable='rosbridge_websocket',
             name='rosbridge_websocket',
