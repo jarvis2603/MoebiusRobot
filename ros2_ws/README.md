@@ -9,6 +9,11 @@ This workspace adds a ROS 2 Jazzy serial bridge without modifying the original e
 - publishes: `/joint_states` (`sensor_msgs/msg/JointState`)
 - broadcasts: `odom -> base_footprint`
 
+## Paired controller firmware
+
+The matching STM32F103RCT6 PlatformIO project is located at `../platformio_firmware`.
+It uses USART1 on PA9/PA10 at 115200 baud and is configured for ST-Link upload/debug.
+
 ## Serial protocol
 
 Host to MCU:
@@ -35,17 +40,27 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-## Run
+## Build the STM32 firmware
 
 ```bash
-ros2 launch moebius_base_driver base_driver.launch.py port:=/dev/ttyACM0
+cd platformio_firmware
+pio run
+pio run --target upload
 ```
 
-Test command:
+## Run
+
+Use `/dev/ttyUSB0` when USART1 is connected through a USB-to-TTL adapter, or change it to the actual device:
+
+```bash
+ros2 launch moebius_base_driver base_driver.launch.py port:=/dev/ttyUSB0
+```
+
+Test command with the wheels lifted safely from the floor:
 
 ```bash
 ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist \
-  "{linear: {x: 0.1}, angular: {z: 0.0}}"
+  "{linear: {x: 0.05}, angular: {z: 0.0}}"
 ```
 
 Inspect feedback:
@@ -57,13 +72,14 @@ ros2 topic echo /joint_states
 
 ## Parameters
 
-Edit `src/moebius_base_driver/config/base_driver.yaml` to match the real robot:
+Edit `src/moebius_base_driver/config/base_driver.yaml` and the matching constants in `platformio_firmware/src/main.cpp`:
 
 - `wheel_radius`
 - `wheel_separation`
 - `ticks_per_revolution`
+- left/right encoder polarity
 - `port`
 - `baudrate`
 - `command_timeout`
 
-The default dimensions are placeholders and must be measured before trusting odometry.
+The default dimensions and pin assignments are placeholders and must be verified against the real controller schematic before trusting odometry or driving the robot.
