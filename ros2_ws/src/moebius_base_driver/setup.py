@@ -25,6 +25,7 @@ setup(
         'console_scripts': [
             'base_driver = moebius_base_driver.base_driver_node:main',
             'robot_control = moebius_base_driver.robot_control_node:main',
+            'nav_goal_bridge = moebius_base_driver.nav_goal_bridge_node:main',
         ],
     },
 )
