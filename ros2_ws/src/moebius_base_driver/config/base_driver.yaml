@@ -1,0 +1,10 @@
+moebius_base_driver:
+  ros__parameters:
+    port: /dev/ttyACM0
+    baudrate: 115200
+    wheel_radius: 0.08
+    wheel_separation: 0.36
+    ticks_per_revolution: 2048.0
+    publish_tf: true
+    command_timeout: 0.5
+    serial_timeout: 0.05
