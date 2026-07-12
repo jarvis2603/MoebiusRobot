@@ -18,6 +18,12 @@ def generate_launch_description() -> LaunchDescription:
             output='screen',
         ),
         Node(
+            package='moebius_base_driver',
+            executable='nav_goal_bridge',
+            name='nav_goal_bridge',
+            output='screen',
+        ),
+        Node(
             package='rosbridge_server',
             executable='rosbridge_websocket',
             name='rosbridge_websocket',
