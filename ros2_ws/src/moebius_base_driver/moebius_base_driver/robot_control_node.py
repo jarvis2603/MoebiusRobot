@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import rclpy
+from geometry_msgs.msg import Twist
 from rclpy.node import Node
 from std_msgs.msg import Bool, Empty, String
 from std_srvs.srv import SetBool, Trigger
@@ -13,14 +14,11 @@ class RobotControlNode(Node):
         super().__init__('robot_control')
         self.started = False
         self.mode = 'manual'
-
-        qos = 10
-        self.started_pub = self.create_publisher(Bool, '/robot/started', qos)
-        self.mode_pub = self.create_publisher(String, '/robot/mode', qos)
-        self.motor_enable_pub = self.create_publisher(Bool, '/motor_enable', qos)
-        self.cmd_vel_pub = self.create_publisher(__import__('geometry_msgs.msg').msg.Twist, '/cmd_vel', qos)
-        self.cancel_pub = self.create_publisher(Empty, '/cancel_navigation', qos)
-
+        self.started_pub = self.create_publisher(Bool, '/robot/started', 10)
+        self.mode_pub = self.create_publisher(String, '/robot/mode', 10)
+        self.motor_enable_pub = self.create_publisher(Bool, '/motor_enable', 10)
+        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.cancel_pub = self.create_publisher(Empty, '/cancel_navigation', 10)
         self.create_service(Trigger, '/robot/start', self.start_callback)
         self.create_service(Trigger, '/robot/stop', self.stop_callback)
         self.create_service(Trigger, '/robot/reset', self.reset_callback)
@@ -29,8 +27,7 @@ class RobotControlNode(Node):
         self.publish_state()
 
     def zero_velocity(self) -> None:
-        twist = __import__('geometry_msgs.msg').msg.Twist()
-        self.cmd_vel_pub.publish(twist)
+        self.cmd_vel_pub.publish(Twist())
 
     def publish_state(self) -> None:
         self.started_pub.publish(Bool(data=self.started))
@@ -65,7 +62,7 @@ class RobotControlNode(Node):
         self.mode = 'manual'
         self.publish_state()
         response.success = True
-        response.message = 'Supervisor state reset; hardware reset is not asserted'
+        response.message = 'Supervisor reset; hardware reset is not asserted'
         return response
 
     def mode_callback(self, request, response):
