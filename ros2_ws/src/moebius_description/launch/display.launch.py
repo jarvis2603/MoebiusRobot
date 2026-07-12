@@ -3,6 +3,7 @@ from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -46,13 +47,13 @@ def generate_launch_description() -> LaunchDescription:
             package='joint_state_publisher_gui',
             executable='joint_state_publisher_gui',
             name='joint_state_publisher_gui',
-            condition=__import__('launch.conditions').conditions.IfCondition(use_gui),
+            condition=IfCondition(use_gui),
         ),
         Node(
             package='joint_state_publisher',
             executable='joint_state_publisher',
             name='joint_state_publisher',
-            condition=__import__('launch.conditions').conditions.UnlessCondition(use_gui),
+            condition=UnlessCondition(use_gui),
         ),
         Node(
             package='rviz2',
