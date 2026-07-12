@@ -1,0 +1,7 @@
+{
+  "name": "MoebiusCore",
+  "version": "1.0.0",
+  "description": "Motor, encoder, PID, MPU6050 and serial protocol support for MoebiusRobot on STM32F103RCT6",
+  "frameworks": "arduino",
+  "platforms": "ststm32"
+}
