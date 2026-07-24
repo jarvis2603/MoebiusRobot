@@ -6,7 +6,7 @@ if [[ ${EUID} -eq 0 ]]; then
   exit 1
 fi
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../../.." && pwd)"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 ROBOT_USER="${SUDO_USER:-$USER}"
 ROS_DISTRO="${ROS_DISTRO:-jazzy}"
 ENV_DIR=/etc/moebius
@@ -17,7 +17,7 @@ NGINX_SITE=/etc/nginx/sites-available/moebius
 
 sudo apt update
 sudo apt install -y \
-  nginx avahi-daemon curl python3-rosdep python3-colcon-common-extensions \
+  nginx avahi-daemon curl nodejs npm python3-rosdep python3-colcon-common-extensions \
   ros-${ROS_DISTRO}-rosbridge-server \
   ros-${ROS_DISTRO}-navigation2 \
   ros-${ROS_DISTRO}-nav2-bringup \
