@@ -1,7 +1,7 @@
 [Unit]
 Description=Moebius ROS 2 Robot Bringup
 Wants=network-online.target
-After=network-online.target dev-ttyUSB0.device
+After=network-online.target
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
@@ -13,7 +13,7 @@ User=__MOEBIUS_USER__
 Group=dialout
 SupplementaryGroups=dialout video render input
 WorkingDirectory=__MOEBIUS_REPO__
-ExecStart=__MOEBIUS_REPO__/ros2_ws/install/moebius_bringup/share/moebius_bringup/scripts/start_robot.sh
+ExecStart=/usr/bin/bash __MOEBIUS_REPO__/ros2_ws/install/moebius_bringup/share/moebius_bringup/scripts/start_robot.sh
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=15
