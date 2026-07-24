@@ -1,0 +1,25 @@
+[Unit]
+Description=Moebius ROS 2 Robot Bringup
+Wants=network-online.target
+After=network-online.target dev-ttyUSB0.device
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+Environment=MOEBIUS_ENV_FILE=/etc/moebius/moebius.env
+EnvironmentFile=/etc/moebius/moebius.env
+User=__MOEBIUS_USER__
+Group=dialout
+SupplementaryGroups=dialout video render input
+WorkingDirectory=__MOEBIUS_REPO__
+ExecStart=__MOEBIUS_REPO__/ros2_ws/install/moebius_bringup/share/moebius_bringup/scripts/start_robot.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+KillSignal=SIGINT
+KillMode=mixed
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
