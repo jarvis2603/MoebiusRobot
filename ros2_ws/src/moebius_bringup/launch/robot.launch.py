@@ -28,10 +28,10 @@ def generate_launch_description() -> LaunchDescription:
     use_sim_time = LaunchConfiguration('use_sim_time')
     nav2_params = LaunchConfiguration('nav2_params')
 
-    bringup_share = Path(get_package_share_directory('moebius_bringup'))
     description_share = Path(get_package_share_directory('moebius_description'))
+    nav2_share = Path(get_package_share_directory('nav2_bringup'))
     xacro_file = description_share / 'urdf' / 'moebius_robot.urdf.xacro'
-    default_nav2_params = str(bringup_share / 'config' / 'nav2_params.yaml')
+    default_nav2_params = str(nav2_share / 'params' / 'nav2_params.yaml')
 
     robot_description = ParameterValue(
         Command(['xacro ', str(xacro_file)]),
