@@ -5,7 +5,9 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import Command, LaunchConfiguration
+from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def include(package: str, launch_file: str, *, condition=None, arguments=None):
@@ -26,8 +28,14 @@ def generate_launch_description() -> LaunchDescription:
     use_sim_time = LaunchConfiguration('use_sim_time')
     nav2_params = LaunchConfiguration('nav2_params')
 
-    default_nav2_params = str(
-        Path(get_package_share_directory('moebius_bringup')) / 'config' / 'nav2_params.yaml'
+    bringup_share = Path(get_package_share_directory('moebius_bringup'))
+    description_share = Path(get_package_share_directory('moebius_description'))
+    xacro_file = description_share / 'urdf' / 'moebius_robot.urdf.xacro'
+    default_nav2_params = str(bringup_share / 'config' / 'nav2_params.yaml')
+
+    robot_description = ParameterValue(
+        Command(['xacro ', str(xacro_file)]),
+        value_type=str,
     )
 
     return LaunchDescription([
@@ -36,15 +44,22 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('use_nav2', default_value='false'),
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('nav2_params', default_value=default_nav2_params),
-
+        Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='robot_state_publisher',
+            output='screen',
+            parameters=[{
+                'robot_description': robot_description,
+                'use_sim_time': use_sim_time,
+            }],
+        ),
         include(
             'moebius_base_driver',
             'base_driver.launch.py',
             arguments={'port': serial_port},
         ),
         include('moebius_base_driver', 'web_bridge.launch.py'),
-        include('moebius_description', 'display.launch.py'),
-
         include(
             'slam_toolbox',
             'online_async_launch.py',
