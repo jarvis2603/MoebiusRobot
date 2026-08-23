@@ -1,0 +1,31 @@
+schema_version: 1
+robot:
+  name: moebius_robot
+  drive_type: mecanum
+  wheel_diameter_m: 0.080
+  wheel_radius_m: 0.040
+  wheelbase_m: 0.220
+  track_width_m: 0.260
+  max_linear_velocity_mps: 0.70
+  max_lateral_velocity_mps: 0.70
+  max_angular_velocity_rps: 3.00
+motor:
+  rated_output_rpm: 178.0
+  gear_ratio: 56.0
+encoder:
+  basic_ppr: 11
+  quadrature_factor: 4
+control:
+  pid_kp: 6.2
+  pid_ki: 0.8
+  pid_kd: 0.2
+  control_period_us: 10000
+  feedback_period_ms: 20
+  command_timeout_ms: 300
+communication:
+  baudrate: 115200
+  default_port: /dev/ttyUSB0
+battery:
+  empty_voltage: 10.8
+  full_voltage: 12.6
+  critical_voltage: 10.5

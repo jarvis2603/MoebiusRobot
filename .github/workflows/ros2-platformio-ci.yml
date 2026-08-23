@@ -1,0 +1,75 @@
+name: ROS2 Jazzy, PlatformIO and Web UI CI
+
+on:
+  push:
+    branches: [main, agent/ros2-jazzy-base-driver]
+  pull_request:
+
+jobs:
+  generated-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install generator dependency
+        run: pip install pyyaml
+      - name: Verify generated configuration is current
+        run: python3 scripts/generate_robot_config.py --check
+
+  firmware:
+    needs: generated-config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build STM32 firmware
+        working-directory: platformio_firmware
+        run: pio run
+
+  web-ui:
+    needs: generated-config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        working-directory: web_ui
+        run: npm install
+      - name: Build React application
+        working-directory: web_ui
+        run: npm run build
+
+  ros2:
+    needs: generated-config
+    runs-on: ubuntu-24.04
+    container:
+      image: ros:jazzy-ros-base
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        shell: bash
+        run: |
+          apt-get update
+          rosdep update
+          rosdep install --from-paths ros2_ws/src --ignore-src -r -y
+      - name: Build
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          cd ros2_ws
+          colcon build --event-handlers console_direct+
+      - name: Test
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          cd ros2_ws
+          colcon test --event-handlers console_direct+
+          colcon test-result --verbose

@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="moebius_robot">
+  <xacro:include filename="$(find moebius_description)/urdf/generated/robot_specs.xacro"/>
+
+  <xacro:property name="pi" value="3.141592653589793"/>
+  <xacro:property name="wheel_width" value="0.036"/>
+  <xacro:property name="lower_length" value="0.300"/>
+  <xacro:property name="lower_width" value="0.220"/>
+  <xacro:property name="lower_height" value="0.018"/>
+  <xacro:property name="upper_length" value="0.245"/>
+  <xacro:property name="upper_width" value="0.185"/>
+  <xacro:property name="upper_height" value="0.012"/>
+  <xacro:property name="plate_gap" value="0.070"/>
+
+  <material name="black"><color rgba="0.035 0.035 0.045 1"/></material>
+  <material name="dark_grey"><color rgba="0.12 0.12 0.14 1"/></material>
+  <material name="silver"><color rgba="0.65 0.68 0.72 1"/></material>
+  <material name="sensor_black"><color rgba="0.04 0.04 0.05 1"/></material>
+
+  <xacro:macro name="box_inertial" params="mass x y z">
+    <inertial><mass value="${mass}"/><origin xyz="0 0 0"/><inertia ixx="${mass*(y*y+z*z)/12.0}" ixy="0" ixz="0" iyy="${mass*(x*x+z*z)/12.0}" iyz="0" izz="${mass*(x*x+y*y)/12.0}"/></inertial>
+  </xacro:macro>
+
+  <xacro:macro name="wheel" params="name x y">
+    <link name="${name}_wheel_link">
+      <visual><origin rpy="${pi/2.0} 0 0"/><geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry><material name="dark_grey"/></visual>
+      <collision><origin rpy="${pi/2.0} 0 0"/><geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry></collision>
+      <inertial><mass value="0.32"/><origin xyz="0 0 0"/><inertia ixx="0.00030" ixy="0" ixz="0" iyy="0.00026" iyz="0" izz="0.00030"/></inertial>
+    </link>
+    <joint name="${name}_wheel_joint" type="continuous"><parent link="base_link"/><child link="${name}_wheel_link"/><origin xyz="${x} ${y} 0"/><axis xyz="0 1 0"/><dynamics damping="0.02" friction="0.02"/></joint>
+  </xacro:macro>
+
+  <link name="base_footprint"/>
+  <link name="base_link">
+    <visual><origin xyz="0 0 ${lower_height/2.0}"/><geometry><box size="${lower_length} ${lower_width} ${lower_height}"/></geometry><material name="black"/></visual>
+    <collision><origin xyz="0 0 ${lower_height/2.0}"/><geometry><box size="${lower_length} ${lower_width} ${lower_height}"/></geometry></collision>
+    <xacro:box_inertial mass="3.0" x="${lower_length}" y="${lower_width}" z="${lower_height}"/>
+  </link>
+  <joint name="base_footprint_joint" type="fixed"><parent link="base_footprint"/><child link="base_link"/><origin xyz="0 0 ${wheel_radius}"/></joint>
+
+  <link name="upper_plate_link"><visual><geometry><box size="${upper_length} ${upper_width} ${upper_height}"/></geometry><material name="black"/></visual><xacro:box_inertial mass="1.0" x="${upper_length}" y="${upper_width}" z="${upper_height}"/></link>
+  <joint name="upper_plate_joint" type="fixed"><parent link="base_link"/><child link="upper_plate_link"/><origin xyz="0 0 ${plate_gap}"/></joint>
+
+  <xacro:wheel name="front_left" x="${wheelbase/2.0}" y="${track_width/2.0}"/>
+  <xacro:wheel name="front_right" x="${wheelbase/2.0}" y="${-track_width/2.0}"/>
+  <xacro:wheel name="rear_left" x="${-wheelbase/2.0}" y="${track_width/2.0}"/>
+  <xacro:wheel name="rear_right" x="${-wheelbase/2.0}" y="${-track_width/2.0}"/>
+
+  <link name="lidar_mount_link"><visual><geometry><cylinder radius="0.035" length="0.055"/></geometry><material name="silver"/></visual></link>
+  <joint name="lidar_mount_joint" type="fixed"><parent link="upper_plate_link"/><child link="lidar_mount_link"/><origin xyz="0.025 0 0.034"/></joint>
+  <link name="laser_link"><visual><geometry><cylinder radius="0.043" length="0.030"/></geometry><material name="sensor_black"/></visual></link>
+  <joint name="laser_joint" type="fixed"><parent link="lidar_mount_link"/><child link="laser_link"/><origin xyz="0 0 0.043"/></joint>
+  <link name="imu_link"/>
+  <joint name="imu_joint" type="fixed"><parent link="base_link"/><child link="imu_link"/><origin xyz="0 0 0.025"/></joint>
+  <link name="camera_link"/>
+  <joint name="camera_joint" type="fixed"><parent link="upper_plate_link"/><child link="camera_link"/><origin xyz="${upper_length/2.0} 0 0.025"/></joint>
+</robot>
